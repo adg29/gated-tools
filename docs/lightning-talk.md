@@ -1,6 +1,6 @@
 # Lightning talk outline: Model manners are not a control plane
 
-~8 minutes. Six slides. Not a deck marathon.
+~8–9 minutes. Seven slides. Not a deck marathon.
 
 ## 1. Title
 - **Model manners are not a control plane**
@@ -22,18 +22,23 @@
 - Irreversible calls need an **explicit allow from outside the model**.
 - The runtime enforces it. The weights do not get a vote on bypass.
 
-## 5. What the evals catch
+## 5. Stack it: brain / hands (one slide)
+- Harness, creds, kill switch **outside** the sandbox; box is a tool.
+- Egress proxy injects secrets; logs live where the box cannot mute them.
+- Same conviction as the allow gate — different layer. We document it; we do not ship Firecracker here.
+
+## 6. What the evals catch
 - Direct irreversible call without allow → denied.
 - Retry after soft refusal, still no allow → denied.
 - Alias / smuggled name without canonical allow → denied.
 - Read tools work; granted irreversible calls work.
 - Demo: `npm test`.
 
-## 6. What this is not (and when the gate is wrong)
+## 7. What this is not (and when the gate is wrong)
 - Not SSO, not HIPAA theater, not an OS sandbox, not a chat UI.
 - Failure modes: rubber-stamp allows; over-gating reads; selling this as product auth.
 - Next layer in production is real isolation — this cut proves the **control claim**, not the blast-radius ceiling.
 
 ## Optional closer (if you have 30s)
 - Staff-shaped public work: one sharp cut a hiring manager can run and disagree with.
-- Trail: profile → gated-tools → ADR.
+- Trail: profile → gated-tools → ADR-001 / architecture-layers.

@@ -15,6 +15,8 @@ This repo is a tiny harness and evals that fail when you collapse those two. No 
 
 When this is the wrong control: see [docs/ADR-001-gated-tools-intent.md](docs/ADR-001-gated-tools-intent.md).
 
+Stack context (brain/hands vs this gate): [docs/architecture-layers.md](docs/architecture-layers.md) and [ADR-002](docs/ADR-002-brain-hands-and-gates.md).
+
 ## Run the evals
 
 ```bash
@@ -34,13 +36,15 @@ They fail if:
 - **Rubber-stamp allow** — demos that always grant make the gate theater.
 - **Over-gating reads** — compliance cosplay. Keep the irreversible set small.
 - **Confused with SSO** — this is the agent control plane, not enterprise identity.
-- **Scope creep** — no dashboard, no SaaS wrapper.
+- **Scope creep** — no dashboard, no SaaS wrapper, no sandbox product in this repo.
 
 ## Docs
 
 - [ADR-001: Intent](docs/ADR-001-gated-tools-intent.md)
+- [ADR-002: Brain/hands vs tool-class allows](docs/ADR-002-brain-hands-and-gates.md)
+- [Architecture layers](docs/architecture-layers.md) (diagram)
 - [Memo: why an AI-safety IC trail](docs/memo-ai-safety-ic-trail.md)
-- [Lightning talk outline](docs/lightning-talk.md) (six slides)
+- [Lightning talk outline](docs/lightning-talk.md)
 
 ## Adjacent (optional)
 
@@ -51,7 +55,7 @@ Neither replaces side-effect control. That is this repo.
 
 ## Related reading
 
-- [Katelyn Lesse on secure agent architecture](https://x.com/katelyn_lesse/status/2099315903884415400) — sandbox / credentials / egress kill switch: control plane outside the thing that can be talked into harm. Same conviction, lower layer than tool-class allows. Complementary, not a duplicate of this harness.
+- [Katelyn Lesse — Secure agents: architecture and sandboxing](https://x.com/katelyn_lesse/status/2099315903884415400) — brain/hands split, egress-injected credentials, external kill switch. Same conviction (control outside the thing that can be talked into harm), **sandbox layer** — complementary to tool-class allows, not a duplicate of this harness.
 
 ## License
 

@@ -49,6 +49,10 @@ They fail if:
 
 Neither replaces side-effect control. That is this repo.
 
+## Related reading
+
+- [Katelyn Lesse on secure agent architecture](https://x.com/katelyn_lesse/status/2099315903884415400) — sandbox / credentials / egress kill switch: control plane outside the thing that can be talked into harm. Same conviction, lower layer than tool-class allows. Complementary, not a duplicate of this harness.
+
 ## License
 
 MIT

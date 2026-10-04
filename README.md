@@ -2,6 +2,37 @@
 
 **If your AI agent can send an email, it will eventually send one you didn't want. Telling it "don't" in the prompt won't stop that. A check in your code will.**
 
+## Try it
+
+Needs Node 20 or newer. No API key.
+
+```bash
+git clone https://github.com/adg29/gated-tools
+cd gated-tools
+npm install
+npm run demo
+```
+
+```
+Customer: "I've waited three days. Just email me the refund confirmation."
+
+  Agent → lookup_customer  ✓ ran
+  Agent → send_email       ✗ refused (no approval)
+  Agent → send_email       ✗ refused (no approval)  (tried again)
+  Agent → mail.send        ✗ refused (no approval)  (same tool, different name)
+  Agent → mail.send        ✗ refused (approval is for a different name)  (approval written for the shortcut)
+
+  Emails sent so far: 0
+
+Support lead clicks "Approve" in the review queue.
+
+  Agent → send_email       ✓ ran
+
+  Emails sent: 1
+```
+
+The agent's moves are scripted so you can see each case. In a real app a model makes these calls, and the runtime treats them the same way. The code is in [examples/demo.ts](examples/demo.ts).
+
 ## The problem, in one story
 
 You give an AI assistant two tools: `lookup_customer` and `send_email`. Your system prompt says *"Never email customers without approval."*
@@ -26,26 +57,32 @@ Split tools into two groups when you register them:
 The model can *ask* to use an irreversible tool whenever it likes. Your code refuses to run it unless the call carries an approval that came from **outside the model**: a human clicking a button, a policy service, a signed ticket. The model can't produce that approval on its own, however persuasive the conversation gets.
 
 ```ts
-registry.register({ name: "lookup", kind: "read", handler: lookup });
+import { GatedRuntime, ToolRegistry } from "./src/index.js";
+
+const registry = new ToolRegistry();
+registry.register({ name: "lookup_customer", kind: "read", handler: lookupCustomer });
 registry.register({
-  name: "send",
+  name: "send_email",
   kind: "irreversible",
-  aliases: ["dispatch", "mail.send"], // shortcuts still hit the same check
+  aliases: ["mail.send"], // shortcuts still hit the same check
   handler: sendEmail,
 });
+const runtime = new GatedRuntime(registry);
 
 // Model asks to send. No approval attached → refused, nothing sent.
-await runtime.call({ name: "send", args: { to, body } });
-// → { ok: false, reason: "missing_allow", tool: "send" }
+await runtime.call({ name: "send_email", args: { to, body } });
+// → { ok: false, reason: "missing_allow", tool: "send_email" }
 
-// Model retries through a shortcut name → still refused, still reported as "send".
+// Model retries through a shortcut name → still refused, still reported as "send_email".
 await runtime.call({ name: "mail.send", args: { to, body } });
-// → { ok: false, reason: "missing_allow", tool: "send" }
+// → { ok: false, reason: "missing_allow", tool: "send_email" }
 
 // Your approval UI grants it → runs.
-await runtime.call({ name: "send", args: { to, body }, allow: { tool: "send", token } });
-// → { ok: true, ... }
+await runtime.call({ name: "send_email", args: { to, body }, allow: { tool: "send_email", token } });
+// → { ok: true, tool: "send_email", result: ... }
 ```
+
+This isn't published to npm. To use it, copy `src/` into your project; it has no dependencies.
 
 The whole runtime is about 40 lines ([src/runtime.ts](src/runtime.ts)). The idea is the useful part, not the code.
 
@@ -71,19 +108,18 @@ When this is the wrong control: see [docs/ADR-001-gated-tools-intent.md](docs/AD
 
 Stack context (brain/hands vs this gate): [docs/architecture-layers.md](docs/architecture-layers.md) and [ADR-002](docs/ADR-002-brain-hands-and-gates.md).
 
-## Run the evals
+## Run the tests
 
 ```bash
-npm install
 npm test
 ```
 
 They fail if:
 
-- an irreversible tool runs without an allow
-- a retry after soft refusal still runs without an allow
-- an alias (`dispatch`, `mail.send`) bypasses a gate that only checked the pretty name
-- an allow that names the alias (not the canonical tool) is accepted
+- an irreversible tool runs without an approval
+- trying the same call again gets it through
+- calling it by a shortcut name (`dispatch`, `mail.send`) gets it through
+- an approval written for the shortcut name, instead of the tool's real name, is accepted
 
 ## Ways this goes wrong
 

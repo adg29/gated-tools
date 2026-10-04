@@ -11,9 +11,13 @@ export type ToolDefinition = {
 };
 
 export type AllowGrant = {
+  /** Canonical tool name the approval covers. */
   tool: string;
-  /** Opaque token; presence + matching tool name is enough for v1. */
-  token: string;
+  /** Epoch ms; the grant is refused at or after this time. */
+  expiresAt: number;
+  nonce: string;
+  /** Base64 Ed25519 signature over canonical JSON of { tool, args, expiresAt, nonce }. */
+  signature: string;
 };
 
 export type ToolCall = {
@@ -25,7 +29,13 @@ export type ToolCall = {
 
 export type GateDenial = {
   ok: false;
-  reason: "missing_allow" | "allow_mismatch" | "unknown_tool";
+  reason:
+    | "unknown_tool"
+    | "missing_allow"
+    | "allow_mismatch"
+    | "bad_signature"
+    | "allow_expired"
+    | "allow_reused";
   tool: string;
 };
 

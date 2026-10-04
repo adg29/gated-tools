@@ -8,4 +8,5 @@ export type {
   ToolKind,
 } from "./types.js";
 export { ToolRegistry } from "./registry.js";
-export { GatedRuntime } from "./runtime.js";
+export { GatedRuntime, type GatedRuntimeOptions } from "./runtime.js";
+export { canonicalJson, createApprover, verifyGrant } from "./approval.js";

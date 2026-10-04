@@ -85,31 +85,22 @@ They fail if:
 - an alias (`dispatch`, `mail.send`) bypasses a gate that only checked the pretty name
 - an allow that names the alias (not the canonical tool) is accepted
 
-## Failure modes we name on purpose
+## Ways this goes wrong
 
-- **Rubber-stamp allow** — demos that always grant make the gate theater.
-- **Over-gating reads** — compliance cosplay. Keep the irreversible set small.
-- **Confused with SSO** — this is the agent control plane, not enterprise identity.
-- **Scope creep** — no dashboard, no SaaS wrapper, no sandbox product in this repo.
+- **Approving everything.** If your harness attaches an approval to every call automatically, the gate does nothing.
+- **Gating too much.** Mark reads as irreversible and people will work around the friction. Keep the list short: send, delete, pay, change external state.
+- **Mistaking it for login or permissions.** This isn't SSO or user access control. It limits what the *agent* can do on its own.
+- **Scope creep.** This repo is a small runtime, tests, and docs. No dashboard, no hosted service, no sandbox.
 
 ## Docs
 
-- [ADR-001: Intent](docs/ADR-001-gated-tools-intent.md)
-- [ADR-002: Brain/hands vs tool-class allows](docs/ADR-002-brain-hands-and-gates.md)
+- [ADR-001: Irreversible tool calls need approval from outside the model](docs/ADR-001-gated-tools-intent.md)
+- [ADR-002: Sandboxing and tool approvals are separate layers](docs/ADR-002-brain-hands-and-gates.md)
 - [Architecture layers](docs/architecture-layers.md) (diagram)
-- [Memo: why an AI-safety IC trail](docs/memo-ai-safety-ic-trail.md)
-- [Lightning talk outline](docs/lightning-talk.md)
-
-## Adjacent (optional)
-
-- [named-computers](https://github.com/adg29/named-computers) — identity, inbox, memory, sleep.
-- [vc-rag-agent](https://github.com/adg29/vc-rag-agent) — faithfulness over messy records.
-
-Neither replaces side-effect control. That is this repo.
 
 ## Related reading
 
-- [Katelyn Lesse — Secure agents: architecture and sandboxing](https://x.com/katelyn_lesse/status/2099315903884415400) — brain/hands split, egress-injected credentials, external kill switch. Same conviction (control outside the thing that can be talked into harm), **sandbox layer** — complementary to tool-class allows, not a duplicate of this harness.
+- [Katelyn Lesse: Secure agents, architecture and sandboxing](https://x.com/katelyn_lesse/status/2099315903884415400). Covers the sandbox side: keeping credentials and the kill switch outside the box where untrusted code runs. Same idea (put the control outside the thing that can be talked into harm), applied to a different layer. It pairs with this repo; it doesn't replace it.
 
 ## License
 

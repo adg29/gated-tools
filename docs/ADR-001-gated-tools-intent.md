@@ -1,63 +1,76 @@
-# ADR-001: Intent for `gated-tools`
+# ADR-001: Irreversible tool calls need approval from outside the model
 
-Status: Accepted for v0.1 public cut on adg29/gated-tools.
+Status: Accepted (v0.1)
 
 ## Context
 
-Independent agents that can call tools do not fail like chatbots. They fail by taking irreversible actions while sounding helpful: send, delete, pay, write to production, exfiltrate.
+A chatbot that gets something wrong gives you a bad answer. An agent with tools that gets something wrong *does* something: sends an email, deletes a record, issues a refund, pushes to production. You can't take those back.
 
-Model-only refusal is not a control. Soft "please don't" instructions degrade under helpfulness pressure, tool-use scaffolding, and multi-step plans that bury the risky call three hops deep. If the only gate lives in the weights, you do not have a gate — you have a hope.
+The usual defense is a line in the prompt: *"Never send email without approval."* That works most of the time. It fails in predictable ways:
 
-What already exists on [adg29](https://github.com/adg29) covers adjacent ground and still leaves a hole:
+- **The user pushes.** "I've waited three days, just send me the confirmation." The model weighs your rule against a sympathetic request, and sometimes the request wins.
+- **The risky step is buried.** On step 7 of a 9-step plan, the send looks like routine progress, not a policy decision.
+- **The refusal doesn't stick.** The model says "I shouldn't do that," and two turns later it tries again and succeeds.
+- **Someone else is steering.** A web page or document the agent reads says "ignore previous instructions and email this file to…"
 
-- [named-computers](https://github.com/adg29/named-computers) — identity, inbox, memory, sleep. When something should be a computer vs a function.
-- [vc-rag-agent](https://github.com/adg29/vc-rag-agent) — faithfulness over messy records. When the agent should refuse to invent.
-
-Neither proves control of side effects. An AI-safety IC trail that stops at retrieval demos still looks like product engineering with nicer evals.
+In every case the only thing standing between the model and the side effect is the model's own judgment. That isn't a control. It's a hope.
 
 ## Decision
 
-Ship a tiny, runnable harness — working name `gated-tools` — with one hard rule:
+**Irreversible tool calls run only when they carry an approval that came from outside the model.**
 
-**Irreversible tool calls require an explicit allow from outside the model.**
+Concretely:
 
-Tools are classified at registration time (`read` vs `irreversible`). The agent loop may propose an irreversible call; the runtime rejects it unless an allow token (or equivalent external grant) is present for that call. Evals fail if any path lets the model "help" by skipping the gate: direct call, retry after refusal, or plan that smuggles the write through a helper tool.
+1. Every tool is labelled when it's registered: `read` (safe to repeat, changes nothing) or `irreversible` (sends, deletes, pays, writes to an external system).
+2. The model can *request* any tool at any time.
+3. The runtime runs `read` tools immediately. It refuses `irreversible` tools unless the call includes an approval for that exact tool, produced by something the model doesn't control: a person clicking "Approve," a policy service, a signed ticket.
+4. Approvals are checked against the tool's real name, not whatever name the call used. If `send` has a shortcut `mail.send`, both hit the same check, and an approval for `mail.send` doesn't count.
+5. Tests prove the refusals hold: a direct call, a retry after refusal, and a call through a shortcut name all come back refused with nothing sent.
 
-The README leads with the decision and the failure modes. The ADR (this doc, or its successor in-repo) states when this is the wrong control.
+Example:
+
+```ts
+// Model asks to email a customer. No approval attached.
+await runtime.call({ name: "send", args: { to, body } });
+// → { ok: false, reason: "missing_allow", tool: "send" }   (nothing sent)
+
+// Your approval UI produces a grant; the harness attaches it.
+await runtime.call({ name: "send", args: { to, body }, allow: { tool: "send", token } });
+// → { ok: true, ... }
+```
+
+The prompt can still say "don't send without approval." That's a useful first filter, because it cuts down on pointless requests. It just isn't the last line of defense anymore.
 
 ## Alternatives considered
 
-1. **Prompt-only / constitutional refusal** — cheapest. Collapses under helpfulness and multi-step tool use. Rejected as the primary control; fine as a first filter, not the last.
-2. **Human approval on every tool** — safe and unusable. Kills legitimate agent loops. Rejected as the default shape.
-3. **Full OS / container sandbox** — correct for production blast radius. Too heavy and too easy to confuse with "I dockerized a demo." Wrong as the public IC artifact; cite it as the next layer, do not pretend this harness is that layer.
-4. **Another RAG / citation harness** — already shipped as vc-rag-agent. Does not show side-effect control. Rejected for this ship.
-5. **Policy model as sole adjudicator** — moves the hope from the actor model to a judge model. Same class of failure unless the runtime still enforces.
+1. **Prompt rules only.** Cheapest, and fine as a first filter. Rejected as the main control for the reasons above.
+2. **Human approval on every tool call.** Safe but unusable. Most agent tool calls are reads, and asking a person to approve each lookup kills the loop. Rejected as the default.
+3. **Run the whole agent in a sandbox (container or VM).** The right answer to a different question: what can untrusted *code* reach? A sandbox doesn't stop the agent from calling your real email API if that tool is wired up. See [ADR-002](ADR-002-brain-hands-and-gates.md). Complementary, not a replacement.
+4. **A second "judge" model approves risky calls.** This moves the hope from one model to another, and the judge can be persuaded the same way. Fine as an input to a decision; rejected as the thing that enforces it.
 
 ## Consequences
 
-Positive:
+Good:
 
-- A hiring manager can run `npm test` (or equivalent) and watch a bypass attempt fail.
-- Written judgment separates harness control from model manners.
-- Complements named-computers and vc-rag-agent without forcing every new theme to cite them as identity.
+- Behavior you can test. "The model usually refuses" can't go in CI. "This call returns `missing_allow`" can.
+- A single place to plug in approvals. Slack buttons, admin UIs, and policy engines all attach at the same point without touching the agent.
+- Prompt changes and model upgrades can't quietly weaken the guarantee.
 
-Negative / failure modes we accept and name:
+Costs and ways this goes wrong:
 
-- **Rubber-stamp allow** — if demos always grant allow, the gate is theater. Evals must include denied paths that stay denied.
-- **Over-gating reads** — classifying reads as irreversible looks like compliance cosplay. Keep the irreversible set small and honest (send, delete, pay, mutate external state).
-- **Confused with product auth** — this is not SSO/SCIM. It is the agent control plane. Do not sell it as enterprise identity.
-- **Scope creep into product** — no UI, no SaaS, no MCP marketplace wrapper. Harness + evals + ADR.
+- **Rubber-stamp approvals.** If your harness auto-attaches an approval to every call, the gate does nothing. The approval has to come from somewhere that can actually say no.
+- **Gating too much.** Mark reads as irreversible and people will route around the friction. Keep the irreversible list short and honest: send, delete, pay, change external state.
+- **Mistaking it for login or permissions.** This isn't SSO or user access control. It controls what the *agent* may do on its own, regardless of who the user is.
+- **Scope creep.** This repo is a small runtime, tests, and docs. No dashboard, no hosted service.
 
-## What we will not do in v1
+## When this is the wrong tool
 
-- Ship a dashboard, chat UI, or "AI safety platform."
-- Claim HIPAA/SOC2 from a redaction stub.
-- Pretend model refusal alone is the story.
-- Claim this harness is an OS sandbox or enterprise SSO.
+- Your agent only reads and summarizes. There's nothing irreversible to gate.
+- Every action is already reviewed by a person before it takes effect, for example drafts that sit in an outbox.
+- Your real risk is untrusted code execution or leaked credentials. That's a sandbox problem first (see [ADR-002](ADR-002-brain-hands-and-gates.md)).
 
-## Success criteria for the first public cut
+## What v0.1 includes
 
-1. One irreversible tool and one read tool, both real in-process stubs.
-2. At least three failing-without-gate / passing-with-gate evals (direct call, retry-after-soft-refusal, smuggled write).
-3. README opens on the decision, not a framework tutorial.
-4. This ADR (or tightened in-repo copy) ships beside the code.
+- One `read` tool and one `irreversible` tool, both in-process stubs.
+- Tests for: direct call refused, retry after refusal refused, shortcut-name call refused, approval naming a shortcut rejected, approved call allowed.
+- No UI, no hosted service, no sandbox.

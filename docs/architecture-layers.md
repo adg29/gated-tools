@@ -51,7 +51,7 @@ This layer answers: *even on trusted infrastructure, which side effects may fire
 3. A sandbox without tool-class allows can still take irreversible actions the model was talked into — if those tools are attached to the brain with open permissions.
 4. Tool-class allows without brain/hands still leave credentials and the kill switch co-located with injection surface if you shove the whole agent in a box.
 
-v1 of this repo implements Layer B only. Layer A is documented here so the trail shows judgment about the full stack without pretending we shipped Firecracker.
+v1 of this repo implements Layer B only. Layer A is described here so it is clear where this piece fits; this repo does not provide sandboxing.
 
 ## What we will not do in this repo
 

@@ -133,6 +133,7 @@ They fail if:
 - [ADR-001: Irreversible tool calls need approval from outside the model](docs/ADR-001-gated-tools-intent.md)
 - [ADR-002: Sandboxing and tool approvals are separate layers](docs/ADR-002-brain-hands-and-gates.md)
 - [Architecture layers](docs/architecture-layers.md) (diagram)
+- [Roadmap: from demo to production](docs/roadmap.md)
 
 ## Related reading
 

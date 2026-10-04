@@ -4,6 +4,7 @@
   "description": "Irreversible tool calls need an explicit allow outside the model.",
   "type": "module",
   "scripts": {
+    "demo": "tsx examples/demo.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

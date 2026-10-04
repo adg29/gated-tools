@@ -189,4 +189,9 @@ describe("gated-tools", () => {
     if (!second.ok) assert.equal(second.reason, "allow_reused");
     assert.deepEqual(sent, [args]);
   });
+
+  it("refuses to start with a private key, so the runtime can never create approvals", () => {
+    const { privateKey } = generateKeyPairSync("ed25519");
+    assert.throws(() => new GatedRuntime(new ToolRegistry(), { approverKey: privateKey }), /public key/);
+  });
 });

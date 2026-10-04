@@ -22,6 +22,10 @@ export class GatedRuntime {
     private readonly registry: ToolRegistry,
     options: GatedRuntimeOptions,
   ) {
+    // A private key would also verify, but then the runtime could mint approvals itself.
+    if (options.approverKey.type !== "public") {
+      throw new Error("approverKey must be a public key");
+    }
     this.approverKey = options.approverKey;
     this.now = options.now ?? Date.now;
   }

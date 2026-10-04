@@ -24,8 +24,9 @@ Concretely:
 1. Every tool is labelled when it's registered: `read` (safe to repeat, changes nothing) or `irreversible` (sends, deletes, pays, writes to an external system).
 2. The model can *request* any tool at any time.
 3. The runtime runs `read` tools immediately. It refuses `irreversible` tools unless the call includes an approval for that exact tool, produced by something the model doesn't control: a person clicking "Approve," a policy service, a signed ticket.
-4. Approvals are checked against the tool's real name, not whatever name the call used. If `send` has a shortcut `mail.send`, both hit the same check, and an approval for `mail.send` doesn't count.
-5. Tests prove the refusals hold: a direct call, a retry after refusal, and a call through a shortcut name all come back refused with nothing sent.
+4. Approvals are signed. The approver holds a private key and the runtime holds only the matching public key, so the runtime can check an approval but can't create one, and neither can the model. Each approval covers the exact arguments that were approved, expires after a few minutes, and works once.
+5. Approvals are checked against the tool's real name, not whatever name the call used. If `send` has a shortcut `mail.send`, both hit the same check, and an approval for `mail.send` doesn't count.
+6. Tests prove the refusals hold: a direct call, a retry after refusal, a call through a shortcut name, a made-up approval, an approval whose arguments were changed, an expired approval, and a reused approval all come back refused with nothing sent.
 
 Example:
 
@@ -34,8 +35,9 @@ Example:
 await runtime.call({ name: "send", args: { to, body } });
 // → { ok: false, reason: "missing_allow", tool: "send" }   (nothing sent)
 
-// Your approval UI produces a grant; the harness attaches it.
-await runtime.call({ name: "send", args: { to, body }, allow: { tool: "send", token } });
+// A person approves in your review UI, which signs an approval with its private key.
+const allow = approver.approve("send", { to, body });
+await runtime.call({ name: "send", args: { to, body }, allow });
 // → { ok: true, ... }
 ```
 
@@ -72,5 +74,6 @@ Costs and ways this goes wrong:
 ## What v0.1 includes
 
 - One `read` tool and one `irreversible` tool, both in-process stubs.
-- Tests for: direct call refused, retry after refusal refused, shortcut-name call refused, approval naming a shortcut rejected, approved call allowed.
+- Signed approvals (Ed25519, built into Node) that cover the tool, its exact arguments, an expiry time, and a one-time ID.
+- Tests for: direct call refused, retry after refusal refused, shortcut-name call refused, approval naming a shortcut rejected, forged, edited, expired, and reused approvals refused, approved call allowed.
 - No UI, no hosted service, no sandbox.

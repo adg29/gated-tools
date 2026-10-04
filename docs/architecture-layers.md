@@ -16,7 +16,7 @@ flowchart TB
     BOX[Sandbox: code / shell / packages]
   end
 
-  U[User / external grant] -->|allow token| G
+  U[User / external grant] -->|signed approval| G
   H --> G
   G -->|read tools| T[(Tools / APIs)]
   G -->|irreversible only with allow| T

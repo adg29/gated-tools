@@ -59,12 +59,10 @@ Split tools into two groups when you register them:
 The model can *ask* to use an irreversible tool whenever it likes. Your code refuses to run it unless the call carries an approval that came from **outside the model**: a human clicking a button, a policy service, a signed ticket. The model can't produce that approval on its own, however persuasive the conversation gets.
 
 ```ts
-import { generateKeyPairSync } from "node:crypto";
-import { createApprover, GatedRuntime, ToolRegistry } from "./src/index.js";
+import { createApprovalKeys, GatedRuntime, ToolRegistry } from "./src/index.js";
 
-// One key pair. The private key stays with whoever approves; the runtime gets the public key.
-const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-const approver = createApprover(privateKey);
+// The approver stays with whoever says yes; the runtime only gets the verifier.
+const { approver, verifier } = createApprovalKeys();
 
 const registry = new ToolRegistry();
 registry.register({ name: "lookup_customer", kind: "read", handler: lookupCustomer });
@@ -74,7 +72,7 @@ registry.register({
   aliases: ["mail.send"], // shortcuts still hit the same check
   handler: sendEmail,
 });
-const runtime = new GatedRuntime(registry, { approverKey: publicKey });
+const runtime = new GatedRuntime(registry, { verifier });
 
 // Model asks to send. No approval attached → refused, nothing sent.
 await runtime.call({ name: "send_email", args: { to, body } });
@@ -90,11 +88,11 @@ await runtime.call({ name: "send_email", args: { to, body }, allow });
 // → { ok: true, tool: "send_email", result: ... }
 ```
 
-Whoever is allowed to say yes (a Slack bot, an admin page, a policy service) holds the private key. The runtime only has the public key, so it can check an approval but can never create one, and neither can the model. Each approval covers one tool with the exact arguments that were approved: change the recipient or the message and it stops working. It also expires after a few minutes and works only once.
+`createApprovalKeys()` makes a key pair for you. Whoever is allowed to say yes (a Slack bot, an admin page, a policy service) holds the approver, which has the private key. The runtime only gets the verifier, which has the public key, so it can check an approval but can never create one, and neither can the model. In production the approver can live in a separate service that loads its own key with `createApprover(privateKey)`, and the runtime gets `signatureVerifier(publicKey)`. Each approval covers one tool with the exact arguments that were approved: change the recipient or the message and it stops working. It also expires after a few minutes and works only once.
 
 This isn't published to npm. To use it, copy `src/` into your project; it has no dependencies.
 
-The whole runtime is about 70 lines ([src/runtime.ts](src/runtime.ts)), plus about 60 for signing and checking approvals ([src/approval.ts](src/approval.ts)). The idea is the useful part, not the code.
+The whole runtime is about 70 lines ([src/runtime.ts](src/runtime.ts)), plus about 75 for signing and checking approvals ([src/approval.ts](src/approval.ts)) and about 20 for the list of used approvals ([src/used-approvals.ts](src/used-approvals.ts)). The idea is the useful part, not the code.
 
 ## Why bother?
 
@@ -134,14 +132,20 @@ They fail if:
 - an approval still works after someone changes the email's recipient or text
 - an approval still works after it expires
 - the same approval can be used twice
+- your own approval check or used-approval list is ignored
+- the tool doesn't receive the approval's one-time ID
 
 ## Ways this goes wrong
 
 - **Approving everything.** If your harness attaches an approval to every call automatically, the gate does nothing.
 - **Gating too much.** Mark reads as irreversible and people will work around the friction. Keep the list short: send, delete, pay, change external state.
-- **Running more than one copy.** The runtime remembers which approvals were already used in memory. If your app runs as several processes, or restarts, each copy starts with a blank list, so the same approval could work once per copy. In production, keep the list of used approvals in a shared store, like a database, that every copy checks.
+- **Running more than one copy.** The runtime remembers which approvals were already used in memory. If your app runs as several processes, or restarts, each copy starts with a blank list, so the same approval could work once per copy. In production, pass your own `usedApprovals` backed by a shared database. Record each approval with a single insert that fails if it's already there; checking first and then writing leaves a gap where two copies can both get through.
 - **Mistaking it for login or permissions.** This isn't SSO or user access control. It limits what the *agent* can do on its own.
 - **Scope creep.** This repo is a small runtime, tests, and docs. No dashboard, no hosted service, no sandbox.
+
+## Plugging in your own pieces
+
+Two parts of the check can be swapped for your own code without changing the runtime. An `ApprovalVerifier` decides whether an approval is real (the built-in one checks the signature; yours could ask a key service), and a `UsedApprovals` list remembers which approvals were already used (the built-in one lives in memory; yours could be a database table every copy of your app shares). The handler for an irreversible tool also gets an `approvalId`: pass it to your email or payment provider as the request's idempotency key, so a retry after a crash can't send twice. What's planned next is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Docs
 

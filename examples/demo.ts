@@ -1,9 +1,8 @@
 // Plays out the README story: a support agent tries to email a customer
 // without approval, then through a shortcut name, then with approval.
 // No model or API key needed; the agent's tool calls are scripted.
-import { generateKeyPairSync } from "node:crypto";
 import {
-  createApprover,
+  createApprovalKeys,
   GatedRuntime,
   ToolRegistry,
   type GateDenial,
@@ -29,10 +28,9 @@ registry.register({
   },
 });
 
-// The review queue holds the private key; the agent's runtime only gets the public key.
-const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-const approver = createApprover(privateKey);
-const runtime = new GatedRuntime(registry, { approverKey: publicKey });
+// The review queue holds the approver (private key); the agent's runtime only gets the verifier (public key).
+const { approver, verifier } = createApprovalKeys();
+const runtime = new GatedRuntime(registry, { verifier });
 const email = { to: "dana@example.com", body: "Your refund is confirmed." };
 
 const reasons: Record<GateDenial["reason"], string> = {

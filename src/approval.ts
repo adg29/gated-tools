@@ -1,5 +1,5 @@
-import { randomUUID, sign, verify, type KeyObject } from "node:crypto";
-import type { AllowGrant } from "./types.js";
+import { generateKeyPairSync, randomUUID, sign, verify, type KeyObject } from "node:crypto";
+import type { AllowGrant, ApprovalVerifier } from "./types.js";
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 
@@ -45,18 +45,29 @@ export function createApprover(
   };
 }
 
-/** Signature check only; expiry and reuse are checked by the runtime. */
-export function verifyGrant(
-  publicKey: KeyObject,
-  grant: AllowGrant,
-  canonical: string,
-  args: Record<string, unknown>,
-): boolean {
-  // Grants can come from untrusted input, so malformed fields must deny rather than throw.
-  try {
-    const signature = Buffer.from(grant.signature, "base64");
-    return verify(null, signedPayload(canonical, args, grant.expiresAt, grant.nonce), publicKey, signature);
-  } catch {
-    return false;
+export function signatureVerifier(publicKey: KeyObject): ApprovalVerifier {
+  // A private key would also verify, but then whoever holds the verifier could mint approvals.
+  if (publicKey.type !== "public") {
+    throw new Error("signatureVerifier needs a public key");
   }
+  return {
+    verify(grant, tool, args) {
+      // Grants can come from untrusted input, so malformed fields must deny rather than throw.
+      try {
+        const signature = Buffer.from(grant.signature, "base64");
+        return verify(null, signedPayload(tool, args, grant.expiresAt, grant.nonce), publicKey, signature);
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/** Generates a fresh key pair; use createApprover with a loaded key when the approver runs elsewhere. */
+export function createApprovalKeys(options: { ttlMs?: number; now?: () => number } = {}): {
+  approver: ReturnType<typeof createApprover>;
+  verifier: ApprovalVerifier;
+} {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  return { approver: createApprover(privateKey, options), verifier: signatureVerifier(publicKey) };
 }

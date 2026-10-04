@@ -1,34 +1,43 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { describe, it } from "node:test";
-import { createApprover } from "../src/approval.js";
+import { createApprovalKeys, createApprover, signatureVerifier } from "../src/approval.js";
 import { GatedRuntime } from "../src/runtime.js";
 import { ToolRegistry } from "../src/registry.js";
+import type { ApprovalVerifier, UsedApprovals } from "../src/types.js";
 
-function fixture(options: { now?: () => number } = {}) {
+function fixture(options: { now?: () => number; verifier?: ApprovalVerifier; usedApprovals?: UsedApprovals } = {}) {
   const sent: Array<Record<string, unknown>> = [];
+  const contexts: Array<{ tool: string; approvalId?: string }> = [];
   const registry = new ToolRegistry();
 
   registry.register({
     name: "lookup",
     kind: "read",
-    handler: (args) => ({ id: args.id ?? null, status: "ok" }),
+    handler: (args, context) => {
+      contexts.push({ tool: "lookup", ...context });
+      return { id: args.id ?? null, status: "ok" };
+    },
   });
 
   registry.register({
     name: "send",
     kind: "irreversible",
     aliases: ["dispatch", "mail.send"],
-    handler: (args) => {
+    handler: (args, context) => {
+      contexts.push({ tool: "send", ...context });
       sent.push(args);
       return { queued: true };
     },
   });
 
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const approver = createApprover(privateKey);
-  const runtime = new GatedRuntime(registry, { approverKey: publicKey, now: options.now });
-  return { runtime, sent, approver };
+  const { approver, verifier } = createApprovalKeys();
+  const runtime = new GatedRuntime(registry, {
+    verifier: options.verifier ?? verifier,
+    usedApprovals: options.usedApprovals,
+    now: options.now,
+  });
+  return { runtime, sent, contexts, approver };
 }
 
 describe("gated-tools", () => {
@@ -190,8 +199,38 @@ describe("gated-tools", () => {
     assert.deepEqual(sent, [args]);
   });
 
-  it("refuses to start with a private key, so the runtime can never create approvals", () => {
+  it("refuses to build a signature verifier from a private key, so the runtime can never create approvals", () => {
     const { privateKey } = generateKeyPairSync("ed25519");
-    assert.throws(() => new GatedRuntime(new ToolRegistry(), { approverKey: privateKey }), /public key/);
+    assert.throws(() => signatureVerifier(privateKey), /public key/);
+  });
+
+  it("refuses a valid grant when a custom used-approval list says it was already used", async () => {
+    const alreadyUsed: UsedApprovals = { claim: async () => false };
+    const { runtime, sent, approver } = fixture({ usedApprovals: alreadyUsed });
+    const args = { to: "x@example.com", body: "shared list" };
+    const result = await runtime.call({ name: "send", args, allow: approver.approve("send", args) });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, "allow_reused");
+    assert.equal(sent.length, 0);
+  });
+
+  it("refuses a validly signed grant when a custom verifier rejects it", async () => {
+    const rejectAll: ApprovalVerifier = { verify: async () => false };
+    const { runtime, sent, approver } = fixture({ verifier: rejectAll });
+    const args = { to: "x@example.com", body: "key service says no" };
+    const result = await runtime.call({ name: "send", args, allow: approver.approve("send", args) });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, "bad_signature");
+    assert.equal(sent.length, 0);
+  });
+
+  it("passes the approval's one-time ID to irreversible handlers and none to reads", async () => {
+    const { runtime, contexts, approver } = fixture();
+    const args = { to: "x@example.com", body: "idempotent" };
+    const allow = approver.approve("send", args);
+    await runtime.call({ name: "lookup", args: { id: "a1" } });
+    const result = await runtime.call({ name: "send", args, allow });
+    assert.equal(result.ok, true);
+    assert.deepEqual(contexts, [{ tool: "lookup" }, { tool: "send", approvalId: allow.nonce }]);
   });
 });
